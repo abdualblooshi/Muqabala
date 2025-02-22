@@ -1,0 +1,34 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  muqabala:
+    container_name: muqabala
+    build: .
+    volumes:
+      - ./reports:/app/reports
+      - ./temp_audio:/app/temp_audio
+      - ${XDG_RUNTIME_DIR}/pulse:/run/user/1000/pulse # For audio in WSL
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_API_URL=http://ollama:11434
+      - MODEL=deepseek-r1:7b
+      - PYTHONUNBUFFERED=1
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native # For audio in WSL
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Required for WSL
+    devices:
+      - "/dev/snd:/dev/snd" # Give access to audio devices
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_data:
