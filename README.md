@@ -125,6 +125,44 @@ muqabala/
   - Streamlit
   - Custom CSS styling
 
+## ⚠️ Troubleshooting
+
+### Ollama Port Issues (Linux/Mac)
+
+If you encounter this error:
+
+```bash
+Error: listen tcp 127.0.0.1:11434: bind: address already in use
+```
+
+Follow these steps:
+
+1. Find the process using port 11434:
+
+   ```bash
+   sudo lsof -i :11434
+   ```
+
+2. You'll see output like:
+
+   ```bash
+   COMMAND PID   USER   FD   TYPE DEVICE SIZE/OFF NODE NAME
+   ollama  264 ollama    3u  IPv4 272993      0t0  TCP localhost:11434 (LISTEN)
+   ```
+
+3. Kill the process using its PID:
+
+   ```bash
+   sudo kill <PID>
+   ```
+
+   (Replace `<PID>` with the actual process ID, e.g., `sudo kill 264`)
+
+4. Restart Ollama:
+   ```bash
+   ollama serve
+   ```
+
 ## 👥 Team
 
 - **Abdulrahman Alblooshi**
