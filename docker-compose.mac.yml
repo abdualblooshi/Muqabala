@@ -1,0 +1,30 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  muqabala:
+    container_name: muqabala
+    build: .
+    volumes:
+      - ./reports:/app/reports
+      - ./temp_audio:/app/temp_audio
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_API_URL=http://ollama:11434
+      - MODEL=deepseek-r1:7b
+      - PYTHONUNBUFFERED=1
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_data:
