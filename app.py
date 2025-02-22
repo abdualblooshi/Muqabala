@@ -148,15 +148,17 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Session state initialization
-if "interview_started" not in st.session_state:
+# Initialize session state variables if they don't exist
+if 'language_selected' not in st.session_state:
+    st.session_state.language_selected = False
+if 'interview_started' not in st.session_state:
     st.session_state.interview_started = False
 if "current_question_index" not in st.session_state:
     st.session_state.current_question_index = 0
 if "questions_and_answers" not in st.session_state:
     st.session_state.questions_and_answers = []
 if "language" not in st.session_state:
-    st.session_state.language = "en"
+    st.session_state.language = None
 if "candidate_info" not in st.session_state:
     st.session_state.candidate_info = {
         "name": "",
@@ -167,24 +169,26 @@ if "recording" not in st.session_state:
     st.session_state.recording = False
 if "recording_stop" not in st.session_state:
     st.session_state.recording_stop = False
-if "recording_thread" not in st.session_state:
-    st.session_state.recording_thread = None
-if "recognition_text" not in st.session_state:
-    st.session_state.recognition_text = ""
-if "refined_text" not in st.session_state:
-    st.session_state.refined_text = ""
-if "live_transcript" not in st.session_state:
-    st.session_state.live_transcript = ""
-if "last_transcript_update" not in st.session_state:
-    st.session_state.last_transcript_update = 0
-if "answers_history" not in st.session_state:
-    st.session_state.answers_history = {}
-if "conversation_history" not in st.session_state:
-    st.session_state.conversation_history = []
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-if "pending_confirmation" not in st.session_state:
-    st.session_state.pending_confirmation = None
+
+# Language selection screen
+if not st.session_state.language_selected:
+    st.title("Choose Your Language / اختر لغتك")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🇬🇧 English", use_container_width=True):
+            st.session_state.language = "en"
+            st.session_state.language_selected = True
+            st.rerun()
+    
+    with col2:
+        if st.button("🇦🇪 العربية", use_container_width=True):
+            st.session_state.language = "ar"
+            st.session_state.language_selected = True
+            st.rerun()
+    
+    st.stop()
 
 # Function to safely stop recording thread
 def stop_recording_thread():
@@ -521,7 +525,7 @@ def display_chat_message(text: str, is_user: bool):
 
 # Main interview interface
 if st.session_state.interview_started:
-    st.title("🤖 Muqabala AI Interviewer")
+    st.title("🤖 Muqabala AI Interviewer" if st.session_state.language == "en" else "🤖 المقابل الآلي مقابلة")
     
     # Generate interview context if not exists
     if "interview_context" not in st.session_state:
@@ -629,54 +633,71 @@ if st.session_state.interview_started:
     st.write(f"Question {(len(st.session_state.chat_history) // 2) + 1} of {len(st.session_state.questions)}")
 
 else:
-    # Welcome screen
-    st.title("👋 Welcome to Muqabala")
-    st.markdown("""
-        ### AI-Powered Interview Assistant
-        
-        Muqabala helps conduct and evaluate job interviews with:
-        - 🗣️ Speech recognition and synthesis
-        - 🌐 Support for English and Arabic
-        - 📊 Real-time evaluation of responses
-        - 📝 Detailed PDF report generation
-        
-        To begin, please enter the candidate information in the sidebar.
-    """)
+    # Welcome screen with language-specific content
+    if st.session_state.language == "ar":
+        st.title("👋 مرحباً بك في مقابلة")
+        st.markdown("""
+            ### مساعد المقابلات المدعوم بالذكاء الاصطناعي
+            
+            مقابلة تساعد في إجراء وتقييم المقابلات الوظيفية من خلال:
+            
+            - 🗣️ التعرف على الكلام والتوليف
+            - 🌐 دعم اللغتين الإنجليزية والعربية
+            - 📊 تقييم الإجابات في الوقت الفعلي
+            - 📝 إنشاء تقرير PDF مفصل
+            
+            للبدء، يرجى إدخال معلومات المرشح في الشريط الجانبي.
+        """)
+    else:
+        st.title("👋 Welcome to Muqabala")
+        st.markdown("""
+            ### AI-Powered Interview Assistant
+            
+            Muqabala helps conduct and evaluate job interviews with:
+            
+            - 🗣️ Speech recognition and synthesis
+            - 🌐 Support for English and Arabic
+            - 📊 Real-time evaluation of responses
+            - 📝 Detailed PDF report generation
+            
+            To begin, please enter the candidate information in the sidebar.
+        """)
 
 def reset_interview():
     """Reset the interview state and return to the welcome screen."""
     for key in list(st.session_state.keys()):
-        if key not in ["speech_handler", "evaluator", "report_generator"]:
+        if key not in ["speech_handler", "evaluator", "report_generator", "language", "language_selected"]:
             del st.session_state[key]
 
 # Sidebar
 with st.sidebar:
-    st.title("👔 Interview Settings")
+    st.title("👔 Interview Settings" if st.session_state.language == "en" else "👔 إعدادات المقابلة")
     
     if not st.session_state.interview_started:
+        name_label = "Candidate Name" if st.session_state.language == "en" else "اسم المرشح"
+        position_label = "Position" if st.session_state.language == "en" else "المنصب"
+        
         st.session_state.candidate_info["name"] = st.text_input(
-            "Candidate Name",
+            name_label,
             key="candidate_name"
         )
         st.session_state.candidate_info["position"] = st.text_input(
-            "Position",
+            position_label,
             key="position"
-        )
-        st.session_state.language = st.selectbox(
-            "Interview Language",
-            ["en", "ar"],
-            format_func=lambda x: "English" if x == "en" else "Arabic"
         )
         
         # Add interview style options
-        st.markdown("### Interview Style")
+        st.markdown("### Interview Style" if st.session_state.language == "en" else "### نمط المقابلة")
+        style_label = "Conversation Style" if st.session_state.language == "en" else "نمط المحادثة"
+        style_options = ["Formal", "Balanced", "Casual"] if st.session_state.language == "en" else ["رسمي", "متوازن", "غير رسمي"]
         interview_style = st.select_slider(
-            "Conversation Style",
-            options=["Formal", "Balanced", "Casual"],
-            value="Balanced"
+            style_label,
+            options=style_options,
+            value=style_options[1]
         )
         
-        if st.button("Start Interview"):
+        start_button_text = "Start Interview" if st.session_state.language == "en" else "بدء المقابلة"
+        if st.button(start_button_text):
             if st.session_state.candidate_info["name"] and st.session_state.candidate_info["position"]:
                 position = st.session_state.candidate_info["position"]
                 
