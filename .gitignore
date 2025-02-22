@@ -1,2 +1,39 @@
+# Virtual Environment
 /venv
-/utils/__pycache__
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Logs
+*.log
+interview_debug.log
+
+# Temporary files and directories
+/temp_audio/
+/tts_models/
+/speech_models/
+/reports/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local development settings
+local_settings.py
