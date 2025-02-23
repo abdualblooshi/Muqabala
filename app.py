@@ -13,6 +13,190 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Add Tailwind CSS CDN and custom styles
+st.markdown("""
+    <link href="https://cdn.tailwindcss.com" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Main container styles */
+        .st-emotion-cache-1vvsst3 {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            height: calc(100vh - 300px);
+            min-height: 400px;
+            overflow-y: auto;
+        }
+        
+        /* Message container */
+        .chat-message {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-in-out;
+            width: 100%;
+            padding: 0 10px;
+        }
+        
+        /* User message specific styles */
+        .chat-message.user {
+            flex-direction: row-reverse;
+        }
+        
+        /* Message content wrapper */
+        .message-wrapper {
+            display: flex;
+            align-items: flex-start;
+            max-width: 70%;
+            gap: 12px;
+        }
+        
+        .user .message-wrapper {
+            flex-direction: row-reverse;
+            margin-left: auto;
+        }
+        
+        /* Avatar styles */
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        
+        .user .message-avatar {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+        }
+        
+        .ai .message-avatar {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        
+        /* Message content */
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 18px;
+            line-height: 1.5;
+            position: relative;
+            font-size: 15px;
+            max-width: 100%;
+            word-wrap: break-word;
+        }
+        
+        .user .message-content {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+        
+        .ai .message-content {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            border-bottom-left-radius: 5px;
+        }
+        
+        /* Input area styles */
+        .input-area {
+            position: sticky;
+            bottom: 0;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+        
+        /* Recording button styles */
+        .recording-button {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            transition: all 0.3s ease;
+        }
+        
+        .recording-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .recording-indicator {
+            width: 10px;
+            height: 10px;
+            background: #ef4444;
+            border-radius: 50%;
+            margin-right: 8px;
+            display: none;
+        }
+        
+        .recording .recording-indicator {
+            display: block;
+            animation: pulse 1.5s infinite;
+        }
+        
+        /* Animations */
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Custom scrollbar */
+        .st-emotion-cache-1vvsst3::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .st-emotion-cache-1vvsst3::-webkit-scrollbar-track {
+            border-radius: 4px;
+        }
+        
+        .st-emotion-cache-1vvsst3::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        
+        .st-emotion-cache-1vvsst3::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Streamlit overrides */
+        .stTextInput > div > div > input {
+            border: 2px solid #e5e7eb;
+            border-radius: 25px !important;
+            padding: 12px 20px !important;
+            font-size: 15px !important;
+            transition: all 0.3s ease;
+        }
+        
+        .stTextInput > div > div > input:focus {
+            border-color: #6366f1 !important;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+        }
+    </style>
+    <link href="static/css/dialog.css" rel="stylesheet">
+    <script src="static/js/recording.js"></script>
+    <script src="static/js/dialog.js"></script>
+""", unsafe_allow_html=True)
+
 import requests
 import json
 from datetime import datetime
@@ -23,6 +207,7 @@ import time
 import threading
 import queue
 import logging
+import pandas as pd
 
 # Import debug utilities
 from interview_modules.debug_utils import (
@@ -49,6 +234,250 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 OLLAMA_API_URL = f"{OLLAMA_BASE_URL}/api/generate"
 MODEL = os.getenv("MODEL", "deepseek-r1:7b")
 
+def get_ai_response(answer: str, context: str, candidate_name: str, position: str, conversation_history: list) -> str:
+    """Get interactive AI response using DeepSeek."""
+    try:
+        # Initialize conversation memory if not exists
+        if 'conversation_memory' not in st.session_state:
+            st.session_state.conversation_memory = {
+                'topics_discussed': set(),
+                'claims_made': {},
+                'response_history': [],
+                'sentiment_history': [],
+                'last_questions': []
+            }
+
+        # Check for interview completion phrases
+        completion_phrases = ["i'm done", "i think i'm done", "i am done", "that's all", "that is all", 
+                            "no i think this is enough", "this is enough", "i think this is enough"]
+        if any(phrase in answer.lower() for phrase in completion_phrases):
+            st.session_state.interview_completed = True
+            st.session_state.questions_and_answers = [
+                {"question": st.session_state.questions[i], "answer": conversation_history[i*2]["content"]}
+                for i in range(len(conversation_history)//2)
+            ]
+            return "Thank you for letting me know. I'll now generate your evaluation report based on our discussion."
+
+        # Build conversation context with proper formatting
+        conversation_context = ""
+        if conversation_history:
+            # Get last 3 exchanges for context
+            last_exchanges = conversation_history[-6:]  # Get last 3 exchanges (6 messages)
+            for entry in last_exchanges:
+                if entry["role"] == "user":
+                    conversation_context += f"[Candidate]: {entry['content']}\n\n"
+                else:
+                    conversation_context += f"[Interviewer]: {entry['content']}\n\n"
+
+        # Check if we should end the interview
+        exchange_count = len(conversation_history) // 2
+        max_exchanges = len(st.session_state.questions)
+        
+        if exchange_count >= max_exchanges:
+            st.session_state.interview_completed = True
+            st.session_state.questions_and_answers = [
+                {"question": st.session_state.questions[i], "answer": conversation_history[i*2]["content"]}
+                for i in range(max_exchanges)
+            ]
+            return "Thank you for your time. The interview is now complete. I will generate your evaluation report."
+
+        # Enhanced response analysis with intent and sentiment
+        analysis_prompt = f"""Analyze the following candidate response for a {position} position:
+
+Response: {answer}
+
+Previous topics discussed: {', '.join(st.session_state.conversation_memory['topics_discussed'])}
+Previous claims made: {json.dumps(st.session_state.conversation_memory['claims_made'], indent=2)}
+
+Provide a detailed analysis in JSON format:
+{{
+    "intent": {{
+        "primary": str,  // main intent (e.g., "demonstrate_experience", "explain_skills", "deflect")
+        "secondary": list,  // secondary intents
+        "confidence": float  // 0-1 scale
+    }},
+    "sentiment": {{
+        "overall": str,  // positive, negative, or neutral
+        "confidence": float,  // 0-1 scale
+        "specific_emotions": list  // detected emotions
+    }},
+    "content_analysis": {{
+        "key_points": list,
+        "new_topics_introduced": list,
+        "claims_made": list,
+        "potential_concerns": list,
+        "credibility_score": float  // 0-1 scale
+    }},
+    "follow_up": {{
+        "recommended_topics": list,
+        "verification_needed": list,
+        "clarification_needed": list
+    }}
+}}"""
+
+        # Get enhanced analysis
+        analysis_response = requests.post(
+            OLLAMA_API_URL,
+            json={
+                "model": MODEL,
+                "prompt": analysis_prompt,
+                "stream": False
+            }
+        )
+        
+        if analysis_response.status_code == 200:
+            analysis_text = analysis_response.json().get("response", "").strip()
+            import re
+            import json
+            
+            # Extract JSON from response
+            json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
+            if json_match:
+                analysis_data = json.loads(json_match.group())
+                
+                # Update conversation memory
+                st.session_state.conversation_memory['topics_discussed'].update(
+                    analysis_data['content_analysis']['new_topics_introduced']
+                )
+                
+                # Track claims and their verification status
+                for claim in analysis_data['content_analysis']['claims_made']:
+                    st.session_state.conversation_memory['claims_made'][claim] = {
+                        'verified': False,
+                        'needs_verification': claim in analysis_data['follow_up']['verification_needed']
+                    }
+                
+                # Store sentiment history
+                st.session_state.conversation_memory['sentiment_history'].append(
+                    analysis_data['sentiment']['overall']
+                )
+            else:
+                analysis_data = {
+                    "intent": {"primary": "unknown", "secondary": [], "confidence": 0.5},
+                    "sentiment": {"overall": "neutral", "confidence": 0.5, "specific_emotions": []},
+                    "content_analysis": {
+                        "key_points": [],
+                        "new_topics_introduced": [],
+                        "claims_made": [],
+                        "potential_concerns": [],
+                        "credibility_score": 0.5
+                    },
+                    "follow_up": {
+                        "recommended_topics": [],
+                        "verification_needed": [],
+                        "clarification_needed": []
+                    }
+                }
+
+        # Generate contextual response based on enhanced analysis
+        response_prompt = f"""You are conducting a professional job interview as an AI Interviewer. This is an ongoing conversation.
+
+CURRENT CONTEXT:
+Position: {position}
+Candidate: {candidate_name}
+Current Topic: {context}
+Progress: Question {exchange_count + 1} of {max_exchanges}
+Interview Style: {st.session_state.interview_style}
+
+CONVERSATION HISTORY:
+{conversation_context}
+
+CANDIDATE'S LATEST RESPONSE:
+{answer}
+
+RESPONSE ANALYSIS:
+Intent: {analysis_data['intent']['primary']} (confidence: {analysis_data['intent']['confidence']})
+Sentiment: {analysis_data['sentiment']['overall']} (emotions: {', '.join(analysis_data['sentiment']['specific_emotions'])})
+Key Points: {', '.join(analysis_data['content_analysis']['key_points'])}
+Claims to Verify: {', '.join(analysis_data['follow_up']['verification_needed'])}
+Topics to Explore: {', '.join(analysis_data['follow_up']['recommended_topics'])}
+Needs Clarification: {', '.join(analysis_data['follow_up']['clarification_needed'])}
+
+CONVERSATION MEMORY:
+Previously Discussed: {', '.join(list(st.session_state.conversation_memory['topics_discussed'])[-3:])}
+Recent Sentiments: {', '.join(st.session_state.conversation_memory['sentiment_history'][-3:])}
+Unverified Claims: {json.dumps([claim for claim, info in st.session_state.conversation_memory['claims_made'].items() if info['needs_verification']], indent=2)}
+
+INTERVIEWER TASK:
+1. Acknowledge their response with specific references
+2. Address any unverified claims or concerns
+3. Follow up on interesting points
+4. Maintain conversation flow
+5. Keep professional but engaging tone
+
+IMPORTANT GUIDELINES:
+1. NEVER repeat the exact same question
+2. Reference specific details from their answer
+3. If they mention metrics or achievements, ask for more details about implementation
+4. If they mention leadership roles, ask about specific challenges and solutions
+5. Show active listening by connecting new information with previously mentioned points
+6. If they seem to be finishing, ask if they would like to add anything else
+
+Generate a natural, contextual response that shows active listening and seeks relevant details.
+Ensure the response is unique and not repetitive of previous responses.
+Respond as the interviewer, maintaining a professional and engaging tone:"""
+
+        # Check response diversity
+        def calculate_similarity(text1, text2):
+            """Calculate simple similarity between two texts."""
+            words1 = set(text1.lower().split())
+            words2 = set(text2.lower().split())
+            intersection = words1.intersection(words2)
+            union = words1.union(words2)
+            return len(intersection) / len(union) if union else 0
+
+        def is_response_repetitive(new_response):
+            """Check if response is too similar to recent responses."""
+            if not st.session_state.conversation_memory['response_history']:
+                return False
+                
+            # Check last 3 responses
+            recent_responses = st.session_state.conversation_memory['response_history'][-3:]
+            similarities = [calculate_similarity(new_response, resp) for resp in recent_responses]
+            return any(sim > 0.7 for sim in similarities)
+
+        # Generate response with retry logic
+        max_retries = 3
+        current_try = 0
+        
+        while current_try < max_retries:
+            response = requests.post(
+                OLLAMA_API_URL,
+                json={
+                    "model": MODEL,
+                    "prompt": response_prompt,
+                    "stream": False
+                }
+            )
+            
+            if response.status_code == 200:
+                ai_response = response.json().get("response", "").strip()
+                
+                if ai_response and len(ai_response) > 20:
+                    if not is_response_repetitive(ai_response):
+                        st.session_state.conversation_memory['response_history'].append(ai_response)
+                        return ai_response
+                    else:
+                        # Add diversity requirement to prompt
+                        response_prompt += f"\n\nIMPORTANT: Previous response was too similar. Generate a completely different response. Focus on these unexplored topics: {', '.join(analysis_data['follow_up']['recommended_topics'][:2])}"
+                        current_try += 1
+                else:
+                    current_try += 1
+            else:
+                current_try += 1
+            
+        # If we get here, use enhanced fallback responses
+        if analysis_data['content_analysis']['claims_made']:
+            return f"You've mentioned some interesting points about {', '.join(analysis_data['content_analysis']['claims_made'][:2])}. Could you provide specific examples or metrics that demonstrate the impact of your work in these areas?"
+        elif analysis_data['follow_up']['recommended_topics']:
+            return f"I'd like to explore more about {analysis_data['follow_up']['recommended_topics'][0]}. Could you tell me about your specific experience or approach in this area?"
+        else:
+            return f"Could you elaborate more on your experience and achievements related to the {position} role? I'm particularly interested in specific examples and measurable impacts."
+        
+    except Exception as e:
+        logger.error(f"Error getting AI response: {e}")
+        return f"I understand. Could you provide more specific examples related to the {position} role?"
+
 # Cache initialization of components
 @st.cache_resource
 def init_speech_handler():
@@ -66,87 +495,6 @@ def init_report_generator():
 speech_handler = init_speech_handler()
 evaluator = init_evaluator()
 report_generator = init_report_generator()
-
-# Dark mode CSS
-st.markdown("""
-    <style>
-        /* Dark mode styles */
-        .stApp {
-            background-color: #1E1E1E;
-            color: #FFFFFF;
-        }
-        .main { padding: 2rem; }
-        .stButton>button { 
-            background-color: #00AAFF;
-            color: white;
-            border-radius: 20px;
-            padding: 0.5rem 2rem;
-            border: none;
-        }
-        .interview-section {
-            background-color: #2D2D2D;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-        }
-        .metrics-section {
-            background-color: #363636;
-            padding: 1rem;
-            border-radius: 10px;
-            margin-top: 1rem;
-        }
-        .stTextInput>div>div>input {
-            background-color: #363636;
-            color: white;
-        }
-        .stSelectbox>div>div>div {
-            background-color: #363636;
-            color: white;
-        }
-        .speech-recognition {
-            padding: 1rem;
-            background-color: #363636;
-            border-radius: 10px;
-            margin: 1rem 0;
-        }
-        .recognition-status {
-            color: #00AAFF;
-            font-style: italic;
-        }
-        /* Progress bar colors */
-        .stProgress > div > div > div {
-            background-color: #00AAFF;
-        }
-        /* Chat message styles */
-        .chat-message {
-            padding: 1.5rem;
-            border-radius: 15px;
-            margin-bottom: 1rem;
-            position: relative;
-            width: 80%;
-        }
-        .ai-message {
-            background-color: #2D2D2D;
-            margin-left: 0;
-            margin-right: auto;
-        }
-        .user-message {
-            background-color: #00AAFF;
-            margin-left: auto;
-            margin-right: 0;
-        }
-        .message-content {
-            margin: 0;
-            padding: 0;
-        }
-        .confirmation-box {
-            background-color: #363636;
-            padding: 1rem;
-            border-radius: 10px;
-            margin: 1rem 0;
-        }
-    </style>
-""", unsafe_allow_html=True)
 
 # Initialize session state variables if they don't exist
 if 'language_selected' not in st.session_state:
@@ -169,6 +517,26 @@ if "recording" not in st.session_state:
     st.session_state.recording = False
 if "recording_stop" not in st.session_state:
     st.session_state.recording_stop = False
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "questions" not in st.session_state:
+    st.session_state.questions = []
+if "enable_hyde" not in st.session_state:
+    st.session_state.enable_hyde = False
+if "enable_graph_rag" not in st.session_state:
+    st.session_state.enable_graph_rag = False
+if "enable_reranking" not in st.session_state:
+    st.session_state.enable_reranking = False
+if "max_contexts" not in st.session_state:
+    st.session_state.max_contexts = 5
+if "documents_loaded" not in st.session_state:
+    st.session_state.documents_loaded = False
+if "processing" not in st.session_state:
+    st.session_state.processing = False
+
+# Add interview completed state
+if 'interview_completed' not in st.session_state:
+    st.session_state.interview_completed = False
 
 # Language selection screen
 if not st.session_state.language_selected:
@@ -326,55 +694,6 @@ def get_default_questions(language: str) -> list:
             "أين ترى نفسك بعد 5 سنوات؟"
         ]
 
-def get_ai_response(answer: str, context: str = "", candidate_name: str = "", position: str = "", conversation_history: list = None) -> str:
-    """Get interactive AI response using DeepSeek."""
-    try:
-        # Build conversation context
-        conversation_context = ""
-        if conversation_history:
-            last_exchanges = conversation_history[-4:]  # Get last 2 exchanges
-            for entry in last_exchanges:
-                if entry["role"] == "candidate":
-                    conversation_context += f"Candidate: {entry['content']}\n"
-                else:
-                    conversation_context += f"Interviewer: {entry['content']}\n"
-
-        prompt = f"""You are an advanced AI interviewer named Muqabala conducting a job interview with {candidate_name} for a {position} position.
-        Act as a professional but warm interviewer, showing genuine interest and engagement. Your responses should feel natural and conversational.
-        
-        Previous conversation:
-        {conversation_context}
-        
-        Current question: {context}
-        Candidate's answer: {answer}
-        
-        Respond naturally as a skilled interviewer would, including:
-        1. A thoughtful acknowledgment that shows you understood their response
-        2. A brief insight or connection to demonstrate your expertise about the {position} role
-        3. An engaging follow-up question or comment that encourages deeper discussion
-        4. If they mention technical skills or experiences, validate them and explore further
-        
-        Keep your tone professional but friendly, as if having a real conversation. Use verbal acknowledgments like "I see", "That's interesting", 
-        or "Tell me more about" to make the conversation flow naturally. Show genuine interest in their responses.
-        
-        Response:"""
-        
-        response = requests.post(
-            OLLAMA_API_URL,
-            json={
-                "model": MODEL,
-                "prompt": prompt,
-                "stream": False
-            }
-        )
-        
-        if response.status_code == 200:
-            return response.json().get("response", "").strip()
-        return f"I see, {candidate_name}. That's interesting. Could you elaborate more on your experience?"
-    except Exception as e:
-        st.error(f"Error getting AI response: {e}")
-        return f"I understand, {candidate_name}. Please tell me more about that."
-
 def display_answer_history(question_index: int):
     """Display the answer history for a specific question."""
     if question_index in st.session_state.answers_history:
@@ -531,123 +850,310 @@ Keep each bullet point concise and directly relevant to the {position} role.'''
         logger.error(f"Error generating interview context: {e}")
         return f"Preparing to interview for the {position} position..."
 
-def display_chat_message(text: str, is_user: bool):
-    """Display a chat message with appropriate styling."""
-    message_class = "user-message" if is_user else "ai-message"
-    st.markdown(f"""
+def display_chat_message(text: str, is_user: bool, is_new: bool = False):
+    """Display a chat message with enhanced styling and typing animation only for new AI messages."""
+    message_class = "user" if is_user else "ai"
+    avatar_text = "👤" if is_user else "🤖"
+    
+    message_html = f"""
         <div class="chat-message {message_class}">
-            <p class="message-content">{"You: " if is_user else "AI: "}{text}</p>
+            <div class="message-wrapper">
+                <div class="message-avatar">{avatar_text}</div>
+                <div class="message-content">{text}</div>
+            </div>
         </div>
-    """, unsafe_allow_html=True)
+    """
+    
+    # Add typing animation only for new AI messages
+    if not is_user and is_new:
+        with st.empty():
+            for i in range(len(text) + 1):
+                current_text = text[:i]
+                st.markdown(f"""
+                    <div class="chat-message {message_class}">
+                        <div class="message-wrapper">
+                            <div class="message-avatar">{avatar_text}</div>
+                            <div class="message-content">{current_text}</div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                time.sleep(0.01)  # Adjust typing speed
+    else:
+        st.markdown(message_html, unsafe_allow_html=True)
 
 # Main interview interface
 if st.session_state.interview_started:
-    st.title("🤖 Muqabala AI Interviewer" if st.session_state.language == "en" else "🤖 المقابل الآلي مقابلة")
-    
-    # Generate interview context if not exists
-    if "interview_context" not in st.session_state:
-        st.session_state.interview_context = get_interview_context(st.session_state.candidate_info["position"])
-        st.session_state.evaluation_criteria = generate_evaluation_criteria(st.session_state.candidate_info["position"])
-    
-    # Display interview context
-    with st.expander("Interview Context", expanded=False):
-        st.markdown(f"**Position:** {st.session_state.candidate_info['position']}")
-        st.write(st.session_state.interview_context)
-        st.markdown("**Key Evaluation Criteria:**")
-        if isinstance(st.session_state.evaluation_criteria, dict):
-            for criterion, weight in st.session_state.evaluation_criteria.items():
-                try:
-                    weight_float = float(weight)
-                    st.write(f"- {criterion.replace('_', ' ').title()}: {weight_float*100:.0f}%")
-                except (TypeError, ValueError):
-                    st.write(f"- {criterion.replace('_', ' ').title()}: {weight}")
-    
-    # Generate role-specific questions if not already generated
-    if "questions" not in st.session_state:
-        with st.spinner("Preparing interview questions..."):
-            st.session_state.questions = generate_interview_questions(
-                st.session_state.candidate_info["position"],
-                st.session_state.language
-            )
-    
-    # Display chat history
-    st.markdown("### Interview Chat")
-    chat_container = st.container()
-    with chat_container:
-        # Display all previous messages
-        for message in st.session_state.chat_history:
-            display_chat_message(message["content"], message["role"] == "user")
+    if st.session_state.interview_completed and not st.session_state.get('evaluation_generated', False):
+        st.info("Generating evaluation... Please wait.")
         
-        # Display current question if no messages yet
-        if not st.session_state.chat_history:
-            current_q = st.session_state.questions[0]
-            display_chat_message(current_q, False)
-    
-    # Input section
-    st.markdown("### Your Response")
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        # Text input for typing responses
-        user_input = st.text_input("Type your response", key="user_input")
-    
-    with col2:
-        # Record button
-        if st.button("🎤 Record Response"):
-            with st.spinner("Recording..."):
-                # Record audio for 10 seconds
-                success, text = speech_handler.record_and_transcribe(
-                    language="en-US" if st.session_state.language == "en" else "ar-SA",
-                    duration=10
-                )
-                if success:
-                    st.session_state.user_input = text
-                    st.experimental_rerun()
+        try:
+            # Prepare conversation history for analysis
+            conversation_text = "\n".join([
+                f"Q: {st.session_state.questions[i//2]}\nA: {msg['content']}"
+                for i, msg in enumerate(st.session_state.chat_history)
+                if msg['role'] == 'user'
+            ])
+            
+            # Get DeepSeek analysis with improved prompt
+            analysis_prompt = f"""You are an expert AI interviewer evaluating a candidate's performance for a {st.session_state.candidate_info['position']} position.
+
+INTERVIEW SUMMARY:
+Candidate: {st.session_state.candidate_info['name']}
+Position: {st.session_state.candidate_info['position']}
+Total Questions: {len(st.session_state.questions)}
+
+INTERVIEW TRANSCRIPT:
+{conversation_text}
+
+EVALUATION TASK:
+Analyze the candidate's responses and provide a structured evaluation in the following JSON format.
+Focus on concrete examples, specific skills, and measurable achievements mentioned.
+
+REQUIRED OUTPUT FORMAT:
+{{
+    "overall_score": float (0-1),
+    "technical_competency": float (0-1),
+    "communication_skills": float (0-1),
+    "problem_solving": float (0-1),
+    "cultural_fit": float (0-1),
+    "strengths": [str, str, str],
+    "areas_for_improvement": [str, str, str],
+    "key_observations": [str, str, str],
+    "recommendations": [str, str, str],
+    "interview_performance": {{
+        "confidence": float (0-1),
+        "clarity": float (0-1),
+        "relevance": float (0-1),
+        "depth": float (0-1)
+    }}
+}}
+
+EVALUATION GUIDELINES:
+1. Base scores on specific examples and achievements mentioned
+2. Consider relevance of responses to the {st.session_state.candidate_info['position']} role
+3. Evaluate technical claims against industry standards
+4. Assess communication clarity and professionalism
+5. Consider cultural fit based on values and work style mentioned
+
+Return ONLY the JSON object, no additional text or explanation."""
+
+            response = requests.post(
+                OLLAMA_API_URL,
+                json={
+                    "model": MODEL,
+                    "prompt": analysis_prompt,
+                    "stream": False
+                },
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                response_text = response.json().get("response", "").strip()
+                import re
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    evaluation_data = json.loads(json_match.group())
+                    required_keys = [
+                        "overall_score", "technical_competency", "communication_skills",
+                        "problem_solving", "cultural_fit", "strengths", "areas_for_improvement",
+                        "key_observations", "recommendations", "interview_performance"
+                    ]
+                    if all(key in evaluation_data for key in required_keys):
+                        st.session_state.final_evaluation = evaluation_data
+                        st.session_state.evaluation_generated = True
+                        st.rerun()
+                    else:
+                        raise ValueError("Incomplete evaluation data structure")
                 else:
-                    st.error("Failed to record audio. Please try typing your response.")
+                    raise ValueError("No valid JSON found in response")
+            else:
+                raise Exception(f"API request failed with status {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error generating evaluation: {e}")
+            st.error("Failed to generate evaluation. Please try again.")
+            st.session_state.interview_completed = False
+            st.session_state.evaluation_generated = False
+            time.sleep(2)
+            st.rerun()
     
-    # Send button
-    if st.button("Send") and (user_input or st.session_state.get("user_input")):
-        response_text = user_input or st.session_state.get("user_input", "")
+    elif st.session_state.interview_completed and st.session_state.get('evaluation_generated', False):
+        # Display evaluation results
+        st.markdown("## 📊 Interview Evaluation")
+        evaluation_data = st.session_state.final_evaluation
         
-        # Add user message to chat history
-        st.session_state.chat_history.append({
-            "role": "user",
-            "content": response_text
-        })
+        # Overall Score
+        st.markdown(f"### Overall Performance: {evaluation_data['overall_score']*100:.1f}%")
+        st.progress(evaluation_data['overall_score'])
         
-        # Get current question context
-        current_q = st.session_state.questions[len(st.session_state.chat_history) // 2]
+        # Key Metrics
+        col1, col2 = st.columns(2)
         
-        # Get AI response
-        with st.spinner("Processing response..."):
-            ai_response = get_ai_response(
-                response_text,
-                current_q,
-                st.session_state.candidate_info["name"],
-                st.session_state.candidate_info["position"],
-                st.session_state.chat_history
+        with col1:
+            st.markdown("### 📈 Core Competencies")
+            metrics = {
+                "Technical Competency": evaluation_data['technical_competency'],
+                "Communication Skills": evaluation_data['communication_skills'],
+                "Problem Solving": evaluation_data['problem_solving'],
+                "Cultural Fit": evaluation_data['cultural_fit']
+            }
+            
+            # Create radar chart data
+            import plotly.graph_objects as go
+            
+            fig = go.Figure(data=go.Scatterpolar(
+                r=list(metrics.values()),
+                theta=list(metrics.keys()),
+                fill='toself'
+            ))
+            
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 1]
+                    )),
+                showlegend=False
             )
+            
+            st.plotly_chart(fig, use_container_width=True)
         
-        # Add AI response to chat history
-        st.session_state.chat_history.append({
-            "role": "ai",
-            "content": ai_response
-        })
+        with col2:
+            st.markdown("### 🎯 Interview Performance")
+            performance = evaluation_data['interview_performance']
+            
+            # Create bar chart
+            import plotly.express as px
+            
+            df = pd.DataFrame({
+                'Metric': list(performance.keys()),
+                'Score': list(performance.values())
+            })
+            
+            fig = px.bar(df, x='Metric', y='Score',
+                       color='Score',
+                       color_continuous_scale='viridis',
+                       range_y=[0, 1])
+            
+            st.plotly_chart(fig, use_container_width=True)
         
-        # Clear input
-        st.session_state.user_input = ""
+        # Strengths and Improvements
+        col1, col2 = st.columns(2)
         
-        # If we've gone through all questions, show the final evaluation
-        if len(st.session_state.chat_history) >= len(st.session_state.questions) * 2:
-            st.success("Interview completed! Click 'End Interview' to generate the report.")
+        with col1:
+            st.markdown("### 💪 Strengths")
+            for strength in evaluation_data['strengths']:
+                st.markdown(f"- {strength}")
         
-        st.experimental_rerun()
-    
-    # Display interview progress
-    progress = min((len(st.session_state.chat_history) + 1) // 2 / len(st.session_state.questions), 1.0)
-    st.progress(progress)
-    st.write(f"Question {(len(st.session_state.chat_history) // 2) + 1} of {len(st.session_state.questions)}")
+        with col2:
+            st.markdown("### 🎯 Areas for Improvement")
+            for area in evaluation_data['areas_for_improvement']:
+                st.markdown(f"- {area}")
+        
+        # Key Observations and Recommendations
+        st.markdown("### 🔍 Key Observations")
+        for observation in evaluation_data['key_observations']:
+            st.markdown(f"- {observation}")
+        
+        st.markdown("### 📝 Recommendations")
+        for recommendation in evaluation_data['recommendations']:
+            st.markdown(f"- {recommendation}")
+        
+        # Add download report button
+        if st.button("Download Detailed Report"):
+            output_path = f"reports/{st.session_state.candidate_info['name'].replace(' ', '_')}_report.pdf"
+            os.makedirs("reports", exist_ok=True)
+            
+            report_generator.generate_report(
+                candidate_name=st.session_state.candidate_info["name"],
+                position=st.session_state.candidate_info["position"],
+                interview_date=st.session_state.candidate_info["date"],
+                questions_and_answers=st.session_state.questions_and_answers,
+                evaluation_metrics=evaluation_data,
+                output_path=output_path,
+                language=st.session_state.language
+            )
+            st.success(f"Report generated: {output_path}")
+
+    else:
+        # Create a container for the chat
+        chat_container = st.container()
+        
+        with chat_container:
+            # Display chat messages
+            for i, message in enumerate(st.session_state.chat_history):
+                is_new = (i == len(st.session_state.chat_history) - 1) and (i > st.session_state.last_message_id)
+                display_chat_message(message["content"], message["role"] == "user", is_new)
+            
+            # Update last_message_id
+            st.session_state.last_message_id = len(st.session_state.chat_history) - 1
+            
+            # Display current question if no messages yet
+            if not st.session_state.chat_history:
+                current_q = st.session_state.questions[0]
+                display_chat_message(current_q, False, True)
+
+        # Input area
+        input_container = st.container()
+        with input_container:
+            st.markdown('<div class="input-area">', unsafe_allow_html=True)
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                user_input = st.text_input(
+                    "Response Input",
+                    placeholder="Type your response...",
+                    label_visibility="collapsed",
+                    key="user_input"
+                )
+            
+            with col2:
+                # Record button with new styling
+                st.markdown("""
+                    <div class="recording-button-container">
+                        <button class="recording-button" id="recordButton" type="button">
+                            <span class="recording-indicator"></span>
+                            <span>🎤 Record</span>
+                        </button>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # Send button
+            if st.button("Send 📤", use_container_width=True, key="send_button"):
+                if user_input:
+                    # Add user message to chat history
+                    st.session_state.chat_history.append({
+                        "role": "user",
+                        "content": user_input
+                    })
+                    
+                    # Get current question context safely
+                    question_index = min(len(st.session_state.chat_history) // 2, len(st.session_state.questions) - 1)
+                    current_q = st.session_state.questions[question_index]
+                    
+                    # Get AI response
+                    with st.spinner("Processing response..."):
+                        ai_response = get_ai_response(
+                            user_input,
+                            current_q,
+                            st.session_state.candidate_info["name"],
+                            st.session_state.candidate_info["position"],
+                            st.session_state.chat_history
+                        )
+                    
+                    # Add AI response to chat history
+                    st.session_state.chat_history.append({
+                        "role": "ai",
+                        "content": ai_response
+                    })
+                    
+                    # Check if interview is completed
+                    if len(st.session_state.chat_history) >= len(st.session_state.questions) * 2:
+                        st.session_state.interview_completed = True
+                    
+                    st.rerun()
 
 else:
     # Welcome screen with language-specific content
@@ -689,6 +1195,24 @@ def reset_interview():
 # Sidebar
 with st.sidebar:
     st.title("👔 Interview Settings" if st.session_state.language == "en" else "👔 إعدادات المقابلة")
+    
+    # Only show language switcher when interview is not in progress
+    if not st.session_state.interview_started:
+        # Add language switcher at the top of sidebar
+        current_lang = "🇬🇧 English" if st.session_state.language == "en" else "🇦🇪 العربية"
+        new_lang = st.selectbox(
+            "Language / اللغة",
+            ["🇬🇧 English", "🇦🇪 العربية"],
+            index=0 if st.session_state.language == "en" else 1,
+            key="language_selector"
+        )
+        
+        # Handle language change
+        if new_lang != current_lang:
+            new_lang_code = "en" if new_lang == "🇬🇧 English" else "ar"
+            if st.session_state.language != new_lang_code:
+                st.session_state.language = new_lang_code
+                st.rerun()
     
     if not st.session_state.interview_started:
         name_label = "Candidate Name" if st.session_state.language == "en" else "اسم المرشح"
