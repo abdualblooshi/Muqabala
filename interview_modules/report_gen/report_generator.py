@@ -168,20 +168,20 @@ class ReportGenerator:
         # Create metrics table
         metrics_data = [
             ['Metric', 'Score'],
-            ['Relevance', f"{metrics['relevance_score']:.2f}"],
-            ['Confidence', f"{metrics['confidence_score']:.2f}"],
-            ['Technical', f"{metrics['technical_score']:.2f}"],
-            ['Language', f"{metrics['language_score']:.2f}"],
+            ['Relevance', f"{metrics['relevance']:.2f}"],
+            ['Confidence', f"{metrics['confidence']:.2f}"],
+            ['Technical', f"{metrics['technical']:.2f}"],
+            ['Language', f"{metrics['language']:.2f}"],
             ['Overall', f"{metrics['overall_score']:.2f}"]
         ]
         
         if language == 'ar':
             metrics_data = [
                 ['المقياس', 'النتيجة'],
-                ['الصلة', f"{metrics['relevance_score']:.2f}"],
-                ['الثقة', f"{metrics['confidence_score']:.2f}"],
-                ['التقني', f"{metrics['technical_score']:.2f}"],
-                ['اللغة', f"{metrics['language_score']:.2f}"],
+                ['الصلة', f"{metrics['relevance']:.2f}"],
+                ['الثقة', f"{metrics['confidence']:.2f}"],
+                ['التقني', f"{metrics['technical']:.2f}"],
+                ['اللغة', f"{metrics['language']:.2f}"],
                 ['الإجمالي', f"{metrics['overall_score']:.2f}"]
             ]
             metrics_data = [[get_display(arabic_reshaper.reshape(str(cell))) 
@@ -208,15 +208,88 @@ class ReportGenerator:
         content.append(table)
         content.append(Spacer(1, 20))
         
-        # Add feedback
-        feedback_title = "Feedback"
-        feedback = metrics.get('feedback', '')
+        # Add Interview Performance section
+        perf_title = "Interview Performance"
         if language == 'ar':
-            feedback_title = "التعليقات"
-            feedback = get_display(arabic_reshaper.reshape(feedback))
-            feedback_title = get_display(arabic_reshaper.reshape(feedback_title))
+            perf_title = "أداء المقابلة"
+            perf_title = get_display(arabic_reshaper.reshape(perf_title))
+        content.append(Paragraph(perf_title, self.styles['Heading3']))
+        content.append(Spacer(1, 12))
         
-        content.append(Paragraph(feedback_title, self.styles['Heading3']))
-        content.append(Paragraph(feedback, self.styles['Normal']))
+        # Create interview performance table
+        perf_data = [
+            ['Metric', 'Score'],
+            ['Confidence', f"{metrics['interview_performance']['confidence']:.2f}"],
+            ['Clarity', f"{metrics['interview_performance']['clarity']:.2f}"],
+            ['Relevance', f"{metrics['interview_performance']['relevance']:.2f}"],
+            ['Depth', f"{metrics['interview_performance']['depth']:.2f}"]
+        ]
+        
+        if language == 'ar':
+            perf_data = [
+                ['المقياس', 'النتيجة'],
+                ['الثقة', f"{metrics['interview_performance']['confidence']:.2f}"],
+                ['الوضوح', f"{metrics['interview_performance']['clarity']:.2f}"],
+                ['الصلة', f"{metrics['interview_performance']['relevance']:.2f}"],
+                ['العمق', f"{metrics['interview_performance']['depth']:.2f}"]
+            ]
+            perf_data = [[get_display(arabic_reshaper.reshape(str(cell))) 
+                       if isinstance(cell, str) else cell 
+                       for cell in row] 
+                      for row in perf_data]
+        
+        perf_table = Table(perf_data, colWidths=[3*inch, 3*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('ALIGN', (1, 1), (-1, -1), 'CENTER')
+        ]))
+        
+        content.append(perf_table)
+        content.append(Spacer(1, 20))
+        
+        # Add strengths and areas for improvement
+        strengths_title = "Key Strengths"
+        improvements_title = "Areas for Improvement"
+        if language == 'ar':
+            strengths_title = "نقاط القوة الرئيسية"
+            improvements_title = "مجالات التحسين"
+            strengths_title = get_display(arabic_reshaper.reshape(strengths_title))
+            improvements_title = get_display(arabic_reshaper.reshape(improvements_title))
+        
+        content.append(Paragraph(strengths_title, self.styles['Heading3']))
+        for strength in metrics['strengths']:
+            if language == 'ar':
+                strength = get_display(arabic_reshaper.reshape(strength))
+            content.append(Paragraph(f"• {strength}", self.styles['Normal']))
+        content.append(Spacer(1, 12))
+        
+        content.append(Paragraph(improvements_title, self.styles['Heading3']))
+        for area in metrics['areas_for_improvement']:
+            if language == 'ar':
+                area = get_display(arabic_reshaper.reshape(area))
+            content.append(Paragraph(f"• {area}", self.styles['Normal']))
+        content.append(Spacer(1, 12))
+        
+        # Add recommendations
+        recommendations_title = "Recommendations"
+        if language == 'ar':
+            recommendations_title = "التوصيات"
+            recommendations_title = get_display(arabic_reshaper.reshape(recommendations_title))
+        
+        content.append(Paragraph(recommendations_title, self.styles['Heading3']))
+        for rec in metrics['recommendations']:
+            if language == 'ar':
+                rec = get_display(arabic_reshaper.reshape(rec))
+            content.append(Paragraph(f"• {rec}", self.styles['Normal']))
         
         return content 
