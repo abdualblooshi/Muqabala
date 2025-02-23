@@ -5,6 +5,7 @@ torch.classes.__path__ = []  # Fix for torch path warning in Streamlit
 
 import streamlit as st
 import streamlit.runtime.scriptrunner.script_runner as script_runner
+import re  # Add import for regular expressions
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -23,16 +24,18 @@ st.markdown("""
             display: flex;
             flex-direction: column;
             padding: 20px;
-            height: calc(100vh - 300px);
+            height: calc(100vh - 400px);
             min-height: 400px;
             overflow-y: auto;
+            overflow-x: hidden;
+            margin-bottom: 180px; /* Space for fixed input bar */
         }
         
         /* Message container */
         .chat-message {
             display: flex;
             align-items: flex-start;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             animation: fadeIn 0.5s ease-in-out;
             width: 100%;
             padding: 0 10px;
@@ -103,19 +106,32 @@ st.markdown("""
         
         /* Input area styles */
         .input-area {
-            position: sticky;
+            position: fixed;
             bottom: 0;
+            left: 0;
+            right: 0;
+            background: #1a1c1e;
             padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-            margin-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1000;
             display: flex;
+            flex-direction: column;
             gap: 10px;
-            z-index: 100;
+        }
+        
+        /* Adjust input container width */
+        .input-area .stTextInput {
+            width: 100%;
+        }
+        
+        /* Style the send button container */
+        .input-area .stButton {
+            width: 100%;
         }
         
         /* Recording button styles */
         .recording-button {
+            width: 100%;
             background: linear-gradient(135deg, #6366f1, #4f46e5);
             color: white;
             padding: 10px 20px;
@@ -125,7 +141,6 @@ st.markdown("""
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 100%;
             transition: all 0.3s ease;
         }
         
@@ -232,7 +247,7 @@ load_dotenv(find_dotenv())
 # Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 OLLAMA_API_URL = f"{OLLAMA_BASE_URL}/api/generate"
-MODEL = os.getenv("MODEL", "deepseek-r1:7b")
+MODEL = os.getenv("MODEL", "deepseek-r1:1.5b")
 
 def get_ai_response(answer: str, context: str, candidate_name: str, position: str, conversation_history: list) -> str:
     """Get interactive AI response using DeepSeek."""
@@ -315,59 +330,75 @@ Provide a detailed analysis in JSON format:
     }}
 }}"""
 
-        # Get enhanced analysis
-        analysis_response = requests.post(
-            OLLAMA_API_URL,
-            json={
-                "model": MODEL,
-                "prompt": analysis_prompt,
-                "stream": False
-            }
-        )
+        # Get DeepSeek analysis with improved prompt
+        print("\n----------------------------------------")
+        print("SENDING PROMPT TO DEEPSEEK:")
+        print(analysis_prompt)
+        print("----------------------------------------\n")
         
-        if analysis_response.status_code == 200:
-            analysis_text = analysis_response.json().get("response", "").strip()
-            import re
-            import json
-            
-            # Extract JSON from response
-            json_match = re.search(r'\{.*\}', analysis_text, re.DOTALL)
-            if json_match:
-                analysis_data = json.loads(json_match.group())
-                
-                # Update conversation memory
-                st.session_state.conversation_memory['topics_discussed'].update(
-                    analysis_data['content_analysis']['new_topics_introduced']
-                )
-                
-                # Track claims and their verification status
-                for claim in analysis_data['content_analysis']['claims_made']:
-                    st.session_state.conversation_memory['claims_made'][claim] = {
-                        'verified': False,
-                        'needs_verification': claim in analysis_data['follow_up']['verification_needed']
-                    }
-                
-                # Store sentiment history
-                st.session_state.conversation_memory['sentiment_history'].append(
-                    analysis_data['sentiment']['overall']
-                )
-            else:
-                analysis_data = {
-                    "intent": {"primary": "unknown", "secondary": [], "confidence": 0.5},
-                    "sentiment": {"overall": "neutral", "confidence": 0.5, "specific_emotions": []},
-                    "content_analysis": {
-                        "key_points": [],
-                        "new_topics_introduced": [],
-                        "claims_made": [],
-                        "potential_concerns": [],
-                        "credibility_score": 0.5
+        # Add retry logic for API calls
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(
+                    OLLAMA_API_URL,
+                    json={
+                        "model": MODEL,
+                        "prompt": analysis_prompt,
+                        "stream": False
                     },
-                    "follow_up": {
-                        "recommended_topics": [],
-                        "verification_needed": [],
-                        "clarification_needed": []
-                    }
-                }
+                    timeout=30
+                )
+                
+                print(f"\nAttempt {attempt + 1}: DeepSeek API response status code: {response.status_code}")
+                
+                if response.status_code == 200:
+                    response_text = response.json().get("response", "").strip()
+                    print("\n----------------------------------------")
+                    print("DEEPSEEK OUTPUT:")
+                    print(response_text)
+                    print("----------------------------------------\n")
+                    
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        print("JSON pattern found in response. Parsed data:")
+                        evaluation_data = json.loads(json_match.group())
+                        print(json.dumps(evaluation_data, indent=2))
+                        
+                        required_keys = [
+                            "overall_score", "technical_competency", "communication_skills",
+                            "problem_solving", "cultural_fit", "strengths", "areas_for_improvement",
+                            "key_observations", "recommendations", "interview_performance"
+                        ]
+                        
+                        missing_keys = [key for key in required_keys if key not in evaluation_data]
+                        if not missing_keys:
+                            print("\nAll required keys present in evaluation data")
+                            st.session_state.final_evaluation = evaluation_data
+                            st.session_state.evaluation_generated = True
+                            print("Evaluation data stored in session state")
+                            st.rerun()
+                        else:
+                            print(f"\nMissing required keys in evaluation data: {missing_keys}")
+                            raise ValueError(f"Incomplete evaluation data structure. Missing keys: {missing_keys}")
+                    else:
+                        print("\nNo JSON pattern found in response")
+                        raise ValueError("No valid JSON found in response")
+                    break
+                elif response.status_code == 404:
+                    raise Exception(f"API endpoint not found. Please check if Ollama is running and the model '{MODEL}' is available.")
+                elif response.status_code == 500:
+                    raise Exception("Internal server error. The model might be overloaded.")
+                else:
+                    raise Exception(f"Unexpected status code: {response.status_code}")
+                    
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                if attempt == max_retries - 1:
+                    raise Exception(f"Failed to connect to Ollama after {max_retries} attempts: {str(e)}")
+                print(f"Attempt {attempt + 1} failed. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
 
         # Generate contextual response based on enhanced analysis
         response_prompt = f"""You are conducting a professional job interview as an AI Interviewer. This is an ongoing conversation.
@@ -380,18 +411,18 @@ Progress: Question {exchange_count + 1} of {max_exchanges}
 Interview Style: {st.session_state.interview_style}
 
 CONVERSATION HISTORY:
-{conversation_context}
-
+        {conversation_context}
+        
 CANDIDATE'S LATEST RESPONSE:
 {answer}
 
 RESPONSE ANALYSIS:
-Intent: {analysis_data['intent']['primary']} (confidence: {analysis_data['intent']['confidence']})
-Sentiment: {analysis_data['sentiment']['overall']} (emotions: {', '.join(analysis_data['sentiment']['specific_emotions'])})
-Key Points: {', '.join(analysis_data['content_analysis']['key_points'])}
-Claims to Verify: {', '.join(analysis_data['follow_up']['verification_needed'])}
-Topics to Explore: {', '.join(analysis_data['follow_up']['recommended_topics'])}
-Needs Clarification: {', '.join(analysis_data['follow_up']['clarification_needed'])}
+Intent: {evaluation_data['intent']['primary']} (confidence: {evaluation_data['intent']['confidence']})
+Sentiment: {evaluation_data['sentiment']['overall']} (emotions: {', '.join(evaluation_data['sentiment']['specific_emotions'])})
+Key Points: {', '.join(evaluation_data['content_analysis']['key_points'])}
+Claims to Verify: {', '.join(evaluation_data['follow_up']['verification_needed'])}
+Topics to Explore: {', '.join(evaluation_data['follow_up']['recommended_topics'])}
+Needs Clarification: {', '.join(evaluation_data['follow_up']['clarification_needed'])}
 
 CONVERSATION MEMORY:
 Previously Discussed: {', '.join(list(st.session_state.conversation_memory['topics_discussed'])[-3:])}
@@ -456,21 +487,17 @@ Respond as the interviewer, maintaining a professional and engaging tone:"""
                 if ai_response and len(ai_response) > 20:
                     if not is_response_repetitive(ai_response):
                         st.session_state.conversation_memory['response_history'].append(ai_response)
-                        return ai_response
-                    else:
-                        # Add diversity requirement to prompt
-                        response_prompt += f"\n\nIMPORTANT: Previous response was too similar. Generate a completely different response. Focus on these unexplored topics: {', '.join(analysis_data['follow_up']['recommended_topics'][:2])}"
-                        current_try += 1
+                    return ai_response
                 else:
                     current_try += 1
             else:
                 current_try += 1
             
         # If we get here, use enhanced fallback responses
-        if analysis_data['content_analysis']['claims_made']:
-            return f"You've mentioned some interesting points about {', '.join(analysis_data['content_analysis']['claims_made'][:2])}. Could you provide specific examples or metrics that demonstrate the impact of your work in these areas?"
-        elif analysis_data['follow_up']['recommended_topics']:
-            return f"I'd like to explore more about {analysis_data['follow_up']['recommended_topics'][0]}. Could you tell me about your specific experience or approach in this area?"
+        if evaluation_data['content_analysis']['claims_made']:
+            return f"You've mentioned some interesting points about {', '.join(evaluation_data['content_analysis']['claims_made'][:2])}. Could you provide specific examples or metrics that demonstrate the impact of your work in these areas?"
+        elif evaluation_data['follow_up']['recommended_topics']:
+            return f"I'd like to explore more about {evaluation_data['follow_up']['recommended_topics'][0]}. Could you tell me about your specific experience or approach in this area?"
         else:
             return f"Could you elaborate more on your experience and achievements related to the {position} role? I'm particularly interested in specific examples and measurable impacts."
         
@@ -858,9 +885,9 @@ def display_chat_message(text: str, is_user: bool, is_new: bool = False):
     message_html = f"""
         <div class="chat-message {message_class}">
             <div class="message-wrapper">
-                <div class="message-avatar">{avatar_text}</div>
-                <div class="message-content">{text}</div>
-            </div>
+            <div class="message-avatar">{avatar_text}</div>
+            <div class="message-content">{text}</div>
+        </div>
         </div>
     """
     
@@ -874,9 +901,9 @@ def display_chat_message(text: str, is_user: bool, is_new: bool = False):
                         <div class="message-wrapper">
                             <div class="message-avatar">{avatar_text}</div>
                             <div class="message-content">{current_text}</div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
                 time.sleep(0.01)  # Adjust typing speed
     else:
         st.markdown(message_html, unsafe_allow_html=True)
@@ -885,14 +912,34 @@ def display_chat_message(text: str, is_user: bool, is_new: bool = False):
 if st.session_state.interview_started:
     if st.session_state.interview_completed and not st.session_state.get('evaluation_generated', False):
         st.info("Generating evaluation... Please wait.")
+        print("Starting evaluation generation process...")
         
         try:
+            # Check if Ollama server is running
+            try:
+                health_check = requests.get(OLLAMA_BASE_URL)
+                if health_check.status_code != 200:
+                    print(f"Ollama server health check failed with status {health_check.status_code}")
+                    raise Exception("Ollama server is not responding")
+                print("Ollama server is running")
+            except requests.exceptions.ConnectionError:
+                print("Failed to connect to Ollama server")
+                raise Exception("Cannot connect to Ollama server. Please ensure it is running.")
+            
             # Prepare conversation history for analysis
+            print(f"Number of messages in chat history: {len(st.session_state.chat_history)}")
+            print(f"Number of questions: {len(st.session_state.questions)}")
+            
             conversation_text = "\n".join([
                 f"Q: {st.session_state.questions[i//2]}\nA: {msg['content']}"
                 for i, msg in enumerate(st.session_state.chat_history)
                 if msg['role'] == 'user'
             ])
+            print(f"Prepared conversation text length: {len(conversation_text)}")
+            print("Sample of conversation text:")
+            print(conversation_text[:500] + "..." if len(conversation_text) > 500 else conversation_text)
+            
+            print("\nSending analysis request to DeepSeek...")
             
             # Get DeepSeek analysis with improved prompt
             analysis_prompt = f"""You are an expert AI interviewer evaluating a candidate's performance for a {st.session_state.candidate_info['position']} position.
@@ -906,70 +953,129 @@ INTERVIEW TRANSCRIPT:
 {conversation_text}
 
 EVALUATION TASK:
-Analyze the candidate's responses and provide a structured evaluation in the following JSON format.
+Analyze the candidate's responses and provide a structured evaluation that MUST follow the exact JSON format below.
 Focus on concrete examples, specific skills, and measurable achievements mentioned.
 
-REQUIRED OUTPUT FORMAT:
+REQUIRED OUTPUT FORMAT (EXAMPLE):
 {{
-    "overall_score": float (0-1),
-    "technical_competency": float (0-1),
-    "communication_skills": float (0-1),
-    "problem_solving": float (0-1),
-    "cultural_fit": float (0-1),
-    "strengths": [str, str, str],
-    "areas_for_improvement": [str, str, str],
-    "key_observations": [str, str, str],
-    "recommendations": [str, str, str],
+    "overall_score": 0.85,
+    "technical_competency": 0.82,
+    "communication_skills": 0.88,
+    "problem_solving": 0.85,
+    "cultural_fit": 0.87,
+    "strengths": [
+        "Strong technical background in relevant technologies",
+        "Excellent communication and articulation of ideas",
+        "Proven track record of problem-solving"
+    ],
+    "areas_for_improvement": [
+        "Could provide more specific metrics for achievements",
+        "Some responses could be more concise",
+        "Limited examples of leadership experience"
+    ],
+    "key_observations": [
+        "Demonstrates deep technical knowledge",
+        "Shows enthusiasm and cultural alignment",
+        "Good balance of technical and soft skills"
+    ],
+    "recommendations": [
+        "Consider for senior technical roles",
+        "Would benefit from leadership opportunities",
+        "Recommend technical team lead position"
+    ],
     "interview_performance": {{
-        "confidence": float (0-1),
-        "clarity": float (0-1),
-        "relevance": float (0-1),
-        "depth": float (0-1)
+        "confidence": 0.9,
+        "clarity": 0.85,
+        "relevance": 0.88,
+        "depth": 0.87
     }}
 }}
 
 EVALUATION GUIDELINES:
-1. Base scores on specific examples and achievements mentioned
-2. Consider relevance of responses to the {st.session_state.candidate_info['position']} role
-3. Evaluate technical claims against industry standards
-4. Assess communication clarity and professionalism
-5. Consider cultural fit based on values and work style mentioned
+1. ALL fields in the above JSON structure are REQUIRED
+2. ALL numeric scores must be between 0.0 and 1.0
+3. Each list must contain exactly 3 items
+4. The interview_performance object MUST include all four metrics
+5. Base scores on specific examples and achievements mentioned
+6. Consider relevance of responses to the {st.session_state.candidate_info['position']} role
+7. Evaluate technical claims against industry standards
+8. Assess communication clarity and professionalism
+9. Consider cultural fit based on values and work style mentioned
 
-Return ONLY the JSON object, no additional text or explanation."""
-
-            response = requests.post(
-                OLLAMA_API_URL,
-                json={
-                    "model": MODEL,
-                    "prompt": analysis_prompt,
-                    "stream": False
-                },
-                timeout=30
-            )
+Return ONLY the JSON object with ALL required fields, no additional text or explanation."""
             
-            if response.status_code == 200:
-                response_text = response.json().get("response", "").strip()
-                import re
-                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                if json_match:
-                    evaluation_data = json.loads(json_match.group())
-                    required_keys = [
-                        "overall_score", "technical_competency", "communication_skills",
-                        "problem_solving", "cultural_fit", "strengths", "areas_for_improvement",
-                        "key_observations", "recommendations", "interview_performance"
-                    ]
-                    if all(key in evaluation_data for key in required_keys):
-                        st.session_state.final_evaluation = evaluation_data
-                        st.session_state.evaluation_generated = True
-                        st.rerun()
+            # Get DeepSeek analysis with improved prompt
+            print("\n----------------------------------------")
+            print("SENDING PROMPT TO DEEPSEEK:")
+            print(analysis_prompt)
+            print("----------------------------------------\n")
+            
+            # Add retry logic for API calls
+            max_retries = 3
+            retry_delay = 2  # seconds
+            
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        OLLAMA_API_URL,
+                        json={
+                            "model": MODEL,
+                            "prompt": analysis_prompt,
+                            "stream": False
+                        },
+                        timeout=30
+                    )
+                    
+                    print(f"\nAttempt {attempt + 1}: DeepSeek API response status code: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        response_text = response.json().get("response", "").strip()
+                        print("\n----------------------------------------")
+                        print("DEEPSEEK OUTPUT:")
+                        print(response_text)
+                        print("----------------------------------------\n")
+                        
+                        json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                        if json_match:
+                            print("JSON pattern found in response. Parsed data:")
+                            evaluation_data = json.loads(json_match.group())
+                            print(json.dumps(evaluation_data, indent=2))
+                            
+                            required_keys = [
+                                "overall_score", "technical_competency", "communication_skills",
+                                "problem_solving", "cultural_fit", "strengths", "areas_for_improvement",
+                                "key_observations", "recommendations", "interview_performance"
+                            ]
+                            
+                            missing_keys = [key for key in required_keys if key not in evaluation_data]
+                            if not missing_keys:
+                                print("\nAll required keys present in evaluation data")
+                                st.session_state.final_evaluation = evaluation_data
+                                st.session_state.evaluation_generated = True
+                                print("Evaluation data stored in session state")
+                                st.rerun()
+                            else:
+                                print(f"\nMissing required keys in evaluation data: {missing_keys}")
+                                raise ValueError(f"Incomplete evaluation data structure. Missing keys: {missing_keys}")
+                        else:
+                            print("\nNo JSON pattern found in response")
+                            raise ValueError("No valid JSON found in response")
+                        break
+                    elif response.status_code == 404:
+                        raise Exception(f"API endpoint not found. Please check if Ollama is running and the model '{MODEL}' is available.")
+                    elif response.status_code == 500:
+                        raise Exception("Internal server error. The model might be overloaded.")
                     else:
-                        raise ValueError("Incomplete evaluation data structure")
-                else:
-                    raise ValueError("No valid JSON found in response")
-            else:
-                raise Exception(f"API request failed with status {response.status_code}")
-                
+                        raise Exception(f"Unexpected status code: {response.status_code}")
+                        
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                    if attempt == max_retries - 1:
+                        raise Exception(f"Failed to connect to Ollama after {max_retries} attempts: {str(e)}")
+                    print(f"Attempt {attempt + 1} failed. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+            
         except Exception as e:
+            print(f"Error in evaluation generation: {str(e)}")
             logger.error(f"Error generating evaluation: {e}")
             st.error("Failed to generate evaluation. Please try again.")
             st.session_state.interview_completed = False
@@ -1074,7 +1180,7 @@ Return ONLY the JSON object, no additional text or explanation."""
                 language=st.session_state.language
             )
             st.success(f"Report generated: {output_path}")
-
+    
     else:
         # Create a container for the chat
         chat_container = st.container()
@@ -1087,12 +1193,12 @@ Return ONLY the JSON object, no additional text or explanation."""
             
             # Update last_message_id
             st.session_state.last_message_id = len(st.session_state.chat_history) - 1
-            
-            # Display current question if no messages yet
-            if not st.session_state.chat_history:
-                current_q = st.session_state.questions[0]
-                display_chat_message(current_q, False, True)
-
+        
+        # Display current question if no messages yet
+        if not st.session_state.chat_history:
+            current_q = st.session_state.questions[0]
+            display_chat_message(current_q, False, True)
+        
         # Input area
         input_container = st.container()
         with input_container:
