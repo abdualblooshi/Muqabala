@@ -172,6 +172,23 @@ if "recording_stop" not in st.session_state:
 
 # Language selection screen
 if not st.session_state.language_selected:
+    # Create header with logo and title side by side
+    header_col1, header_col2 = st.columns([1, 2])
+    
+    with header_col1:
+        st.image("images/Muqabala_Chatbot-removebg-preview.png", width=250)
+    
+    with header_col2:
+        st.markdown("""
+            <div style='padding: 30px 0px;'>
+                <h1 style='font-size: 3em; margin: 0;'>Muqabala AI Interview Chatbot</h1>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Add some space
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Language selection
     st.title("Choose Your Language / اختر لغتك")
     
     col1, col2 = st.columns(2)
