@@ -85,22 +85,6 @@ An intelligent interview assistant that conducts, evaluates, and generates repor
    - Select interview language
    - Start the interview process
 
-## 🏗️ Project Structure
-
-```
-muqabala/
-├── app.py                         # Main Streamlit application
-├── interview_modules/
-│   ├── speech/
-│   │   └── speech_handler.py      # Speech recognition & synthesis
-│   ├── evaluation/
-│   │   └── evaluator.py          # Response evaluation
-│   └── report_gen/
-│       └── report_generator.py    # PDF report generation
-├── requirements.txt
-└── README.md
-```
-
 ## 🔧 Technologies Used
 
 - **Speech Processing**
